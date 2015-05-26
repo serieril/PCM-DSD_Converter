@@ -43,31 +43,50 @@ public:
 	CButton m_bAllListDelete;
 	CButton m_bRun;
 	CButton m_bListDelete;
+	//全て実行
 	afx_msg void OnBnClickedAllrun();
+	//全て削除
 	afx_msg void OnBnClickedAlllistdelete();
+	//実行
 	afx_msg void OnBnClickedRun();
+	//削除
 	afx_msg void OnBnClickedListdelete();
+	//ファイル/ディレクトリがドロップ&ドラッグ
 	afx_msg void OnDropFiles(HDROP hDropInfo);
+	//閉じる
 	afx_msg void OnClose();
 	afx_msg void OnDestroy();
+	//サイズ変更
 	afx_msg void OnSize(UINT nType, int cx, int cy);
+	//サンプリングレートのコンボボックス
 	CComboBox m_cSamplingRate;
 	afx_msg void OnCbnSelchangeSamplingrate();
 	CStatic m_sSamplingRate;
+	//Wavファイルがドロップされた時の初動
 	afx_msg void WAV_FileRead(TCHAR *FileName);
+	//ディレクトリの再帰的検索
 	afx_msg void DirectoryFind(TCHAR *DirectoryPath);
+	//Wavファイルチェック及びメタデータ読み取り
 	afx_msg bool WAV_Metadata(TCHAR *filepath, string *metadata);
+	//PCM-DSD変換の管理
 	afx_msg bool WAV_Convert(TCHAR *filepath, int number);
+	//DSDIFF形式で書き込み
 	afx_msg bool DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, int number);
-	afx_msg bool Creat_TmpFile(TCHAR *filepath);
+	//読み書きデータ準備
 	afx_msg bool RequireWriteData(TCHAR *filepath, CString flag, wchar_t *FileMode, FILE **WriteDatadsd);
+	//Wavファイルを64bitFloat(double)化し、LR分離して一時ファイルとして書き出し
 	afx_msg bool TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr, int Times);
+	//PCM-DSD変換
 	afx_msg bool WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Times, omp_lock_t *myLock);
-	afx_msg bool PCMtoDSD(FILE *UpSampleData, FILE *OrigData, int dsdtimes);
+	//フリーズ防止のためにスレッド作成
 	void WorkThread();
+	//処理中はボタンなど無効に
 	void Disable();
+	//処理が終わったらボタンなど有効化
 	void Enable();
+	//F1ヘルプ無効化
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
+	//FFTプラン初期化
 	void FFTInit(fftw_plan *plan, __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout);
 	void iFFTInit(fftw_plan *plan, __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout);
 };

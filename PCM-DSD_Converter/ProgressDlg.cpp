@@ -24,6 +24,7 @@ void ProgressDlg::OnSetFocus() {
 ProgressDlg::~ProgressDlg()
 {
 }
+//子ダイアログでの操作は無視する
 void ProgressDlg::OnCancel(){
 	//DestroyWindow();
 }
@@ -43,6 +44,7 @@ void ProgressDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT2, m_ecTimes);
 }
 
+//子ダイアログでのパス名表示
 void ProgressDlg::Start(TCHAR *Path){
 	TCHAR tchstr1[512];
 	TCHAR *tchstr2 = L"をDSD変換中";
@@ -51,6 +53,7 @@ void ProgressDlg::Start(TCHAR *Path){
 	m_ecTEXT.SetWindowTextW(tchstr1);
 }
 
+//プログレスバー管理
 void ProgressDlg::Process(int percent, int position){
 	TCHAR *tchstr;
 	m_pProgress.SetRange32(0, position);
@@ -75,7 +78,7 @@ BEGIN_MESSAGE_MAP(ProgressDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_CancelBottun, &ProgressDlg::OnBnClickedCancelbottun)
 END_MESSAGE_MAP()
 
-
+//F1ヘルプ無効化
 BOOL ProgressDlg::OnHelpInfo(HELPINFO* pHelpInfo)
 {
 	// TODO: ここにメッセージ ハンドラー コードを追加するか、既定の処理を呼び出します。
@@ -83,7 +86,7 @@ BOOL ProgressDlg::OnHelpInfo(HELPINFO* pHelpInfo)
 	return true;
 }
 
-
+//中止ボタンが押された
 void ProgressDlg::OnBnClickedCancelbottun()
 {
 	Cancelbottun = false;

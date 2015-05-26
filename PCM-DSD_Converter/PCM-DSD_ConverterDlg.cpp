@@ -79,6 +79,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 	return TRUE;  // フォーカスをコントロールに設定した場合を除き、TRUE を返します。
 }
 
+//ウィンドウサイズ変更時のアイテム追従
 void CPCMDSD_ConverterDlg::ListInit(){
 	m_lFileList.SetExtendedStyle(LVS_EX_FULLROWSELECT);
 	m_lFileList.InsertColumn(m_lFileList.GetHeaderCtrl().GetItemCount(), L"ファイル名", LVCFMT_LEFT, 150);
@@ -136,6 +137,7 @@ void CPCMDSD_ConverterDlg::OnSize(UINT nType, int cx, int cy)
 	Invalidate(TRUE);
 }
 
+//閉じる操作等無効化
 void CPCMDSD_ConverterDlg::OnClose()
 {
 	// TODO: ここにメッセージ ハンドラー コードを追加するか、既定の処理を呼び出します。
@@ -157,6 +159,7 @@ HCURSOR CPCMDSD_ConverterDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+//Wavファイルチェック及びメタデータ読み取り
 bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, string *metadata)
 {
 	char filepath_tmp[512];
@@ -203,6 +206,7 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, string *metadata)
 		}
 	}
 
+	//fmtIDでFloatInt判別
 	_fseeki64(fprwav, 4, SEEK_CUR);
 	fread(&fmtID, 2, 1, fprwav);
 	if (fmtID == 3){
@@ -269,6 +273,174 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, string *metadata)
 	return true;
 }
 
+//DSDIFF形式で書き込み
+bool CPCMDSD_ConverterDlg::DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, int number){
+	int OrigSamplingRate = _ttoi(m_lFileList.GetItemText(number, 1));
+	int BaseSamplingRate;
+	if (OrigSamplingRate % 44100 == 0){
+		BaseSamplingRate = 44100;
+	}
+	else{
+		BaseSamplingRate = 48000;
+	}
+
+	int OrigBit = _ttoi(m_lFileList.GetItemText(number, 2).Left(2));
+	int OrigDataSize = _ttoi(m_lFileList.GetItemText(number, 4)) / ((OrigBit / 8) * 2);
+	int DSD_SamplingRate;
+
+	switch (m_cSamplingRate.GetCurSel()) {
+	case 0:
+		DSD_SamplingRate = BaseSamplingRate * 64;
+		break;
+	case 1:
+		DSD_SamplingRate = BaseSamplingRate * 128;
+		break;
+	case 2:
+		DSD_SamplingRate = BaseSamplingRate * 256;
+		break;
+	case 3:
+		DSD_SamplingRate = BaseSamplingRate * 512;
+		break;
+	case 4:
+		DSD_SamplingRate = BaseSamplingRate * 1024;
+		break;
+	case 5:
+		DSD_SamplingRate = BaseSamplingRate * 2048;
+		break;
+	}
+
+	__int64 DSD_SampleSize = OrigDataSize*(DSD_SamplingRate / OrigSamplingRate);
+	__int64 DSD_DataSize = DSD_SampleSize / 4;
+	_fseeki64(LData, 0, SEEK_END);
+	_fseeki64(RData, 0, SEEK_END);
+	_fseeki64(LData, _ftelli64(LData) - DSD_SampleSize, SEEK_SET);
+	_fseeki64(RData, _ftelli64(RData) - DSD_SampleSize, SEEK_SET);
+
+
+	fwrite("FRM8", 4, 1, WriteData);//FRM8
+	unsigned __int64 binary = 0;
+	binary = reverse_endian(DSD_DataSize - 210);
+	fwrite(&binary, 8, 1, WriteData);//chunksize
+	fwrite("DSD ", 4, 1, WriteData);//DSD
+
+	fwrite("FVER", 4, 1, WriteData);//FVER
+	binary = 0;
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	binary = reverse_endian(4);
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+
+	//Version
+	binary = 1;
+	fwrite(&binary, 1, 1, WriteData);
+	binary = 5;
+	fwrite(&binary, 1, 1, WriteData);
+	binary = 0;
+	fwrite(&binary, 1, 1, WriteData);
+	binary = 0;
+	fwrite(&binary, 1, 1, WriteData);
+
+	fwrite("PROP", 4, 1, WriteData);//PROP
+	binary = 0;
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	binary = reverse_endian(74);
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	fwrite("SND ", 4, 1, WriteData);//SND
+
+	fwrite("FS  ", 4, 1, WriteData);//FS
+	binary = 0;
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	binary = reverse_endian(4);
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	unsigned __int32 binary1;
+	binary1 = reverse_endian(DSD_SamplingRate);
+	fwrite(&binary1, 4, 1, WriteData);//SamplingRate
+
+	fwrite("CHNL", 4, 1, WriteData);//CHNL
+	binary = 0;
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	binary = reverse_endian(10);
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	binary = 0;//number of channel
+	fwrite(&binary, 1, 1, WriteData);
+	binary = 2;
+	fwrite(&binary, 1, 1, WriteData);
+	fwrite("SLFT", 4, 1, WriteData);//SLFT
+	fwrite("SRGT", 4, 1, WriteData);//SRGT
+
+	fwrite("CMPR", 4, 1, WriteData);//CMPR
+	binary = 0;
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	binary = reverse_endian(20);
+	fwrite(&binary, 4, 1, WriteData);//Chunksize
+	fwrite("DSD ", 4, 1, WriteData);//DSD
+	binary = 14;
+	fwrite(&binary, 1, 1, WriteData);
+	fwrite("not compressed ", 15, 1, WriteData);//not compressed
+
+	fwrite("DSD ", 4, 1, WriteData);//DSD
+	binary = reverse_endian(DSD_DataSize);
+	fwrite(&binary, 8, 1, WriteData);//Chunksize
+	__int64 i = 0;
+	int buffersize = 16384 * 2 * 8;
+	unsigned char *onebit = new unsigned char[buffersize / 4];
+	unsigned char *tmpdataL = new unsigned char[buffersize];
+	unsigned char *tmpdataR = new unsigned char[buffersize];
+	unsigned char tmpL = 0; unsigned char tmpR = 0;
+	int n = 0;
+	int p = 0;
+	int t = 0;
+	int k = 0;
+	//WAV_FilterはLRごとUnsignedCharで書き出しているので、それを8サンプル1バイトにまとめてから
+	//データ領域として書き出す
+	for (i = 0; i < DSD_SampleSize / buffersize; i++){
+		p = 0;
+		fread(tmpdataL, 1, buffersize, LData);
+		fread(tmpdataR, 1, buffersize, RData);
+		for (k = 0; k < buffersize / 4; k++){
+			onebit[k] = tmpdataL[p] << 7;
+			onebit[k] += tmpdataL[p + 1] << 6;
+			onebit[k] += tmpdataL[p + 2] << 5;
+			onebit[k] += tmpdataL[p + 3] << 4;
+			onebit[k] += tmpdataL[p + 4] << 3;
+			onebit[k] += tmpdataL[p + 5] << 2;
+			onebit[k] += tmpdataL[p + 6] << 1;
+			onebit[k] += tmpdataL[p + 7] << 0;
+			k++;
+			onebit[k] = tmpdataR[p] << 7;
+			onebit[k] += tmpdataR[p + 1] << 6;
+			onebit[k] += tmpdataR[p + 2] << 5;
+			onebit[k] += tmpdataR[p + 3] << 4;
+			onebit[k] += tmpdataR[p + 4] << 3;
+			onebit[k] += tmpdataR[p + 5] << 2;
+			onebit[k] += tmpdataR[p + 6] << 1;
+			onebit[k] += tmpdataR[p + 7] << 0;
+			p += 8;
+		}
+		fwrite(onebit, 1, buffersize / 4, WriteData);//DSD_Data
+	}
+	while (!feof(LData)){
+		fread(tmpdataL, 1, 8, LData);
+		fread(tmpdataR, 1, 8, RData);
+		for (n = 0; n < 8; n++){
+			if (tmpdataL[n] == 1){
+				tmpL += unsigned char(pow(2, 7 - n));
+			}
+			if (tmpdataR[n] == 1){
+				tmpR += unsigned char(pow(2, 7 - n));
+			}
+		}
+		fwrite(&tmpL, 1, 1, WriteData);
+		fwrite(&tmpR, 1, 1, WriteData);
+		tmpL = 0;
+		tmpR = 0;
+	}
+	delete[] onebit;
+	delete[] tmpdataL;
+	delete[] tmpdataR;
+	return true;
+}
+
+//一時ファイル削除
 bool TrushFile(TCHAR *filepath, CString flag){
 	wchar_t DirectoryName[512];
 	wchar_t FileName[512];
@@ -296,6 +468,7 @@ bool TrushFile(TCHAR *filepath, CString flag){
 	return true;
 }
 
+//読み書きデータ準備
 bool CPCMDSD_ConverterDlg::RequireWriteData(TCHAR *filepath, CString flag, wchar_t *FileMode, FILE **WriteDatadsd){
 	wchar_t DirectoryName[512];
 	wchar_t FileName[512];
@@ -356,6 +529,7 @@ bool CPCMDSD_ConverterDlg::RequireWriteData(TCHAR *filepath, CString flag, wchar
 	return true;
 }
 
+////Wavファイルを64bitFloat(double)化し、LR分離して一時ファイルとして書き出し
 bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr, int Times){
 	FILE *wavread;
 	errno_t error;
@@ -389,6 +563,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr,
 			}
 		}
 	}
+	//fmtIDでFloatInt判別
 	short fmtID;
 	_fseeki64(wavread, 4, SEEK_CUR);
 	fread(&fmtID, 2, 1, wavread);
@@ -424,6 +599,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr,
 	long samplesize;
 	fread(&samplesize, 4, 1, wavread);
 
+	//データがDSD変換時にきれいに割り切れるように、頭にゼロフィルする
 	ifstream ifs(".\\FIRFilter.dat");
 	int section_1 = 0;
 	string str;
@@ -452,6 +628,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr,
 		fwrite(&buffer_double, 8, 1, tmpl);
 		fwrite(&buffer_double, 8, 1, tmpr);
 	}
+
+	//各種フォーマットの値をdouble型変数に-1,1に正規化して入れる
 	if (floatint){
 		for (int i = 0; i < writelength; i++){
 			if (!m_dProgress.Cancelbottun) return false;
@@ -496,18 +674,22 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr,
 	return true;
 }
 
+//FFTプラン初期化
+//FFT FIRで処理は削減しているものの、アップサンプリングの最後の方ではさすがにFFTサイズが大きく、処理が重い
+//FFTW_Wisdomや、CPU拡張命令を試したが、目に見える改善はせず。要対策。
 void CPCMDSD_ConverterDlg::FFTInit(fftw_plan *plan, __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout){
 	fftw_plan_with_nthreads(omp_get_max_threads() / 2);
-	*plan = fftw_plan_dft_r2c_1d(int(fftsize / Times), fftin, ifftout, FFTW_ESTIMATE);
+	*plan = fftw_plan_dft_r2c_1d(int(fftsize / Times), fftin, ifftout, FFTW_ESTIMATE);	
 }
-
 void CPCMDSD_ConverterDlg::iFFTInit(fftw_plan *plan, __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout){
 	fftw_plan_with_nthreads(omp_get_max_threads() / 2);
 	*plan = fftw_plan_dft_c2r_1d(int(fftsize / Times), ifftin, fftout, FFTW_ESTIMATE);
 }
 
+//PCM-DSD変換
 bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Times, omp_lock_t *myLock){
 	//FIRフィルタ係数読み込み
+	//タップ数は2^N-1
 	ifstream ifs(".\\FIRFilter.dat");
 	int section_1 = 0;
 	string str;
@@ -532,7 +714,9 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	_fseeki64(OrigData, 0, SEEK_SET);
 	samplesize = samplesize / 8;
 
-
+	//FFT Overlap add Methodを用いたFIRフィルタ畳みこみ演算
+	//この時、x(L),h(N),FFT(M)としたとき、M>=L+N-1になる必要があるので
+	//最終アップサンプリング時にM=2*L=2*(M+1)となるように定義
 	const int logtimes = int(log(Times) / log(2));
 	const int fftsize = (section_1 + 1) * Times;
 	const int datasize = fftsize / 2;
@@ -627,7 +811,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	__int64 SplitNum = (samplesize / datasize)*Times;
 	//Convolution&UpSampling
 	for (i = 0; i < SplitNum; i++){
-		m_dProgress.Process(int(i + 1), int(SplitNum));
+		m_dProgress.Process(int(i + 1), int(SplitNum));//子ダイアログのプログレスバーに値を投げる
 		fread(buffer, 8, datasize / Times, OrigData);
 		for (t = 0; t < logtimes; t++){
 			for (p = 0; p < zerosize[t]; p++){
@@ -692,7 +876,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 			deltabuffer[0] = err - next;
 		}
 		fwrite(out, 1, datasize, UpSampleData);
-		if (!m_dProgress.Cancelbottun) return false;
+		if (!m_dProgress.Cancelbottun) return false;//子ダイアログで中止ボタンが押された
 	}
 
 	//お掃除
@@ -726,6 +910,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	return true;
 }
 
+//フリーズ防止のためにスレッド作成
 UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam){
 	CPCMDSD_ConverterDlg* pDlg = (CPCMDSD_ConverterDlg*)pParam;
 	int DSD_Times;
@@ -828,9 +1013,12 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam){
 	return TRUE;
 }
 
+//PCM-DSD変換の管理
 bool CPCMDSD_ConverterDlg::WAV_Convert(TCHAR *filepath, int number){
 	m_dProgress.Start(filepath);
 	m_dProgress.Process(0, 100);
+
+	//DSDのサンプリングレートにするには何倍すればいいのか計算
 	int DSD_Times;
 	switch (m_cSamplingRate.GetCurSel()) {
 	case 0:
@@ -994,6 +1182,7 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(TCHAR *filepath, int number){
 	return true;
 }
 
+//Wavファイルがドロップされた時の初動
 void CPCMDSD_ConverterDlg::WAV_FileRead(TCHAR *FileName){
 	string *metadata = new string[5];
 	bool flag = true;
@@ -1025,6 +1214,7 @@ void CPCMDSD_ConverterDlg::WAV_FileRead(TCHAR *FileName){
 	delete[] metadata;
 }
 
+//ディレクトリの再帰的検索
 void CPCMDSD_ConverterDlg::DirectoryFind(TCHAR *DirectoryPath){
 	CFileFind find;
 	TCHAR FilePathTemp[512];
@@ -1057,6 +1247,7 @@ void CPCMDSD_ConverterDlg::DirectoryFind(TCHAR *DirectoryPath){
 	}
 }
 
+//ファイル/ディレクトリがドロップ&ドラッグ
 void CPCMDSD_ConverterDlg::OnDropFiles(HDROP hDropInfo)
 {
 	// TODO: ここにメッセージ ハンドラー コードを追加するか、既定の処理を呼び出します。
@@ -1079,6 +1270,7 @@ void CPCMDSD_ConverterDlg::OnDropFiles(HDROP hDropInfo)
 	CDialogEx::OnDropFiles(hDropInfo);
 }
 
+//処理中はボタンなど無効に
 void CPCMDSD_ConverterDlg::Disable(){
 	m_dProgress.EnableWindow(TRUE);
 	m_dProgress.ShowWindow(TRUE);
@@ -1096,6 +1288,7 @@ void CPCMDSD_ConverterDlg::Disable(){
 	DragAcceptFiles(FALSE);
 }
 
+//処理が終わったらボタンなど有効化
 void CPCMDSD_ConverterDlg::Enable(){
 	m_dProgress.EnableWindow(FALSE);
 	m_dProgress.ShowWindow(FALSE);
@@ -1114,6 +1307,7 @@ void CPCMDSD_ConverterDlg::Enable(){
 	DragAcceptFiles(TRUE);
 }
 
+//全てを実行
 void CPCMDSD_ConverterDlg::OnBnClickedAllrun()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
@@ -1123,6 +1317,7 @@ void CPCMDSD_ConverterDlg::OnBnClickedAllrun()
 	}
 }
 
+//実行
 void CPCMDSD_ConverterDlg::OnBnClickedRun()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
@@ -1132,12 +1327,14 @@ void CPCMDSD_ConverterDlg::OnBnClickedRun()
 	}
 }
 
+//全てを削除
 void CPCMDSD_ConverterDlg::OnBnClickedAlllistdelete()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
 	m_lFileList.DeleteAllItems();
 }
 
+//削除
 void CPCMDSD_ConverterDlg::OnBnClickedListdelete()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
@@ -1148,16 +1345,19 @@ void CPCMDSD_ConverterDlg::OnBnClickedListdelete()
 	}
 }
 
+//DSDサンプリングレートコンボボックス
 void CPCMDSD_ConverterDlg::OnCbnSelchangeSamplingrate()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
 }
 
+//閉じる動作をオーバーライド
 void CPCMDSD_ConverterDlg::OnCancel(){
 	m_dProgress.DestroyWindow();
 	CDialogEx::OnCancel();
 }
 
+//F1ヘルプ無効化
 BOOL CPCMDSD_ConverterDlg::OnHelpInfo(HELPINFO* pHelpInfo)
 {
 	// TODO: ここにメッセージ ハンドラー コードを追加するか、既定の処理を呼び出します。
