@@ -24,7 +24,7 @@ public:
 	virtual void OnCancel();
 	virtual void PostNcDestroy();
 	void Start(TCHAR *Path);
-	void Process(int percent,int position);
+	void Process(unsigned __int64 percent, unsigned __int64 position);
 	CProgressCtrl m_pProgress;
 	CString m_evTEXT;
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);

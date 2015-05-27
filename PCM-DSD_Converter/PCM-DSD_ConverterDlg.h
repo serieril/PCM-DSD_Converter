@@ -43,6 +43,14 @@ public:
 	CButton m_bAllListDelete;
 	CButton m_bRun;
 	CButton m_bListDelete;
+	CStatic m_scPrecision;
+	CComboBox m_ccPrecision;
+	CStatic m_scPath;
+	CEdit m_ecPath;
+	CButton m_bcPath;
+	CComboBox m_cSamplingRate;
+	CStatic m_sSamplingRate;
+	CString m_evPath;
 	//全て実行
 	afx_msg void OnBnClickedAllrun();
 	//全て削除
@@ -51,6 +59,8 @@ public:
 	afx_msg void OnBnClickedRun();
 	//削除
 	afx_msg void OnBnClickedListdelete();
+	//参照
+	afx_msg void OnBnClickedPathcheck();
 	//ファイル/ディレクトリがドロップ&ドラッグ
 	afx_msg void OnDropFiles(HDROP hDropInfo);
 	//閉じる
@@ -58,10 +68,6 @@ public:
 	afx_msg void OnDestroy();
 	//サイズ変更
 	afx_msg void OnSize(UINT nType, int cx, int cy);
-	//サンプリングレートのコンボボックス
-	CComboBox m_cSamplingRate;
-	afx_msg void OnCbnSelchangeSamplingrate();
-	CStatic m_sSamplingRate;
 	//Wavファイルがドロップされた時の初動
 	afx_msg void WAV_FileRead(TCHAR *FileName);
 	//ディレクトリの再帰的検索
@@ -74,10 +80,13 @@ public:
 	afx_msg bool DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, int number);
 	//読み書きデータ準備
 	afx_msg bool RequireWriteData(TCHAR *filepath, CString flag, wchar_t *FileMode, FILE **WriteDatadsd);
+	//一時ファイル削除
+	afx_msg bool TrushFile(TCHAR *filepath, CString flag);
 	//Wavファイルを64bitFloat(double)化し、LR分離して一時ファイルとして書き出し
 	afx_msg bool TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr, int Times);
 	//PCM-DSD変換
 	afx_msg bool WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Times, omp_lock_t *myLock);
+	afx_msg bool WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, int Times);
 	//フリーズ防止のためにスレッド作成
 	void WorkThread();
 	//処理中はボタンなど無効に
@@ -87,6 +96,6 @@ public:
 	//F1ヘルプ無効化
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
 	//FFTプラン初期化
-	void FFTInit(fftw_plan *plan, __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout);
-	void iFFTInit(fftw_plan *plan, __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout);
+	void FFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout);
+	void iFFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout);
 };

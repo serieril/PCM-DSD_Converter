@@ -25,6 +25,7 @@ T reverse_endian(T value)
 // CPCMDSD_ConverterDlg ダイアログ
 CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CPCMDSD_ConverterDlg::IDD, pParent)
+	, m_evPath(_T(""))
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -39,6 +40,13 @@ void CPCMDSD_ConverterDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDB_ListDelete, m_bListDelete);
 	DDX_Control(pDX, IDC_SamplingRate, m_cSamplingRate);
 	DDX_Control(pDX, IDS_STATIC, m_sSamplingRate);
+	DDX_Control(pDX, IDS_STATIC2, m_scPrecision);
+	DDX_Control(pDX, IDC_Precision, m_ccPrecision);
+	DDX_Control(pDX, IDS_STATIC3, m_scPath);
+	DDX_Control(pDX, IDC_EditPath, m_ecPath);
+	DDX_Control(pDX, IDC_PathCheck, m_bcPath);
+	DDX_Text(pDX, IDC_EditPath, m_evPath);
+	DDX_Text(pDX, IDC_EditPath, m_evPath);
 }
 
 BEGIN_MESSAGE_MAP(CPCMDSD_ConverterDlg, CDialogEx)
@@ -52,8 +60,8 @@ BEGIN_MESSAGE_MAP(CPCMDSD_ConverterDlg, CDialogEx)
 	ON_WM_CLOSE()
 	ON_WM_DESTROY()
 	ON_WM_SIZE()
-	ON_CBN_SELCHANGE(IDC_SamplingRate, &CPCMDSD_ConverterDlg::OnCbnSelchangeSamplingrate)
 	ON_WM_HELPINFO()
+	ON_BN_CLICKED(IDC_PathCheck, &CPCMDSD_ConverterDlg::OnBnClickedPathcheck)
 END_MESSAGE_MAP()
 
 
@@ -72,6 +80,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 	{
 		setlocale(LC_CTYPE, "jpn");
 		m_cSamplingRate.SetCurSel(0);
+		m_ccPrecision.SetCurSel(0);
 		DragAcceptFiles();
 		ListInit();
 		m_dProgress.Create(ProgressDlg::IDD, this);
@@ -79,7 +88,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 	return TRUE;  // フォーカスをコントロールに設定した場合を除き、TRUE を返します。
 }
 
-//ウィンドウサイズ変更時のアイテム追従
+//ファイルリスト設定
 void CPCMDSD_ConverterDlg::ListInit(){
 	m_lFileList.SetExtendedStyle(LVS_EX_FULLROWSELECT);
 	m_lFileList.InsertColumn(m_lFileList.GetHeaderCtrl().GetItemCount(), L"ファイル名", LVCFMT_LEFT, 150);
@@ -93,6 +102,7 @@ void CPCMDSD_ConverterDlg::ListInit(){
 //  下のコードが必要です。ドキュメント/ビュー モデルを使う MFC アプリケーションの場合、
 //  これは、Framework によって自動的に設定されます。
 
+//ウィンドウサイズ変更時のアイテム追従
 void CPCMDSD_ConverterDlg::OnPaint()
 {
 	if (IsIconic())
@@ -119,16 +129,22 @@ void CPCMDSD_ConverterDlg::OnPaint()
 		GetClientRect(&rect);
 
 		//③サイズ調整
-		m_lFileList.MoveWindow(0, 0, rect.Width(), rect.Height() - 30);
-		m_bListDelete.MoveWindow(rect.Width() - 85, rect.Height() - 25, 80, 20);
-		m_bRun.MoveWindow(rect.Width() - 170, rect.Height() - 25, 80, 20);
-		m_bAllListDelete.MoveWindow(rect.Width() - 255, rect.Height() - 25, 80, 20);
-		m_bAllRun.MoveWindow(rect.Width() - 340, rect.Height() - 25, 80, 20);
-		m_cSamplingRate.MoveWindow(rect.Width() - 450, rect.Height() - 25, 80, 20);
-		m_sSamplingRate.MoveWindow(rect.Width() - 535, rect.Height() - 21, 80, 20);
+		m_lFileList.MoveWindow(0, 0, rect.Width(), rect.Height() - 55);
+		m_bListDelete.MoveWindow(rect.Width() - 85, rect.Height() - 50, 80, 20);
+		m_bRun.MoveWindow(rect.Width() - 170, rect.Height() - 50, 80, 20);
+		m_bAllListDelete.MoveWindow(rect.Width() - 255, rect.Height() - 50, 80, 20);
+		m_bAllRun.MoveWindow(rect.Width() - 340, rect.Height() - 50, 80, 20);
+		m_cSamplingRate.MoveWindow(rect.Width() - 450, rect.Height() - 50, 80, 20);
+		m_sSamplingRate.MoveWindow(rect.Width() - 535, rect.Height() - 46, 80, 20);
+		m_ccPrecision.MoveWindow(rect.Width() - 450, rect.Height() - 25, 80, 20);
+		m_scPrecision.MoveWindow(rect.Width() - 480, rect.Height() - 21, 80, 20);
+		m_scPath.MoveWindow(rect.Width() - 350, rect.Height() - 21, 80, 20);
+		m_ecPath.MoveWindow(rect.Width() - 310, rect.Height() - 25, 240, 20);
+		m_bcPath.MoveWindow(rect.Width() - 65, rect.Height() - 25, 60, 20);
 		CDialogEx::OnPaint();
 	}
 }
+
 
 void CPCMDSD_ConverterDlg::OnSize(UINT nType, int cx, int cy)
 {
@@ -285,7 +301,7 @@ bool CPCMDSD_ConverterDlg::DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, 
 	}
 
 	int OrigBit = _ttoi(m_lFileList.GetItemText(number, 2).Left(2));
-	int OrigDataSize = _ttoi(m_lFileList.GetItemText(number, 4)) / ((OrigBit / 8) * 2);
+	unsigned __int64 OrigDataSize = _ttoi(m_lFileList.GetItemText(number, 4)) / ((OrigBit / 8) * 2);
 	int DSD_SamplingRate;
 
 	switch (m_cSamplingRate.GetCurSel()) {
@@ -309,8 +325,8 @@ bool CPCMDSD_ConverterDlg::DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, 
 		break;
 	}
 
-	__int64 DSD_SampleSize = OrigDataSize*(DSD_SamplingRate / OrigSamplingRate);
-	__int64 DSD_DataSize = DSD_SampleSize / 4;
+	unsigned __int64 DSD_SampleSize = OrigDataSize*(DSD_SamplingRate / OrigSamplingRate);
+	unsigned __int64 DSD_DataSize = DSD_SampleSize / 4;
 	_fseeki64(LData, 0, SEEK_END);
 	_fseeki64(RData, 0, SEEK_END);
 	_fseeki64(LData, _ftelli64(LData) - DSD_SampleSize, SEEK_SET);
@@ -380,7 +396,7 @@ bool CPCMDSD_ConverterDlg::DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, 
 	fwrite("DSD ", 4, 1, WriteData);//DSD
 	binary = reverse_endian(DSD_DataSize);
 	fwrite(&binary, 8, 1, WriteData);//Chunksize
-	__int64 i = 0;
+	unsigned __int64 i = 0;
 	int buffersize = 16384 * 2 * 8;
 	unsigned char *onebit = new unsigned char[buffersize / 4];
 	unsigned char *tmpdataL = new unsigned char[buffersize];
@@ -441,7 +457,7 @@ bool CPCMDSD_ConverterDlg::DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, 
 }
 
 //一時ファイル削除
-bool TrushFile(TCHAR *filepath, CString flag){
+bool CPCMDSD_ConverterDlg::TrushFile(TCHAR *filepath, CString flag){
 	wchar_t DirectoryName[512];
 	wchar_t FileName[512];
 	wchar_t FileExt[512];
@@ -458,10 +474,17 @@ bool TrushFile(TCHAR *filepath, CString flag){
 	DirectorySingleName.erase(0, DirectorySingleName.rfind("\\", n));
 	mbstowcs_s(&num, DirectoryName, 512, DirectorySingleName.c_str(), 512);
 
-	wchar_t cdir[512];
-	GetCurrentDirectory(512, cdir);
-
-	CString DeletePath = cdir; DeletePath += DirectoryName; DeletePath += _T("\\"); DeletePath += FileName + flag;
+	CString DeletePath;
+	if (m_evPath == L""){
+		wchar_t cdir[512];
+		GetCurrentDirectory(512, cdir);
+		DeletePath = cdir;
+		DeletePath += DirectoryName;
+	}
+	else{
+		DeletePath = m_evPath;
+	}
+	DeletePath += _T("\\"); DeletePath += FileName + flag;
 	if (!DeleteFileW(DeletePath)){
 		return false;
 	}
@@ -486,11 +509,18 @@ bool CPCMDSD_ConverterDlg::RequireWriteData(TCHAR *filepath, CString flag, wchar
 	DirectorySingleName.erase(0, DirectorySingleName.rfind("\\", n));
 	mbstowcs_s(&num, DirectoryName, 512, DirectorySingleName.c_str(), 512);
 
-	wchar_t cdir[512];
-	GetCurrentDirectory(512, cdir);
+	CString WritePath;
+	if (m_evPath == L""){
+		wchar_t cdir[512];
+		GetCurrentDirectory(512, cdir);
+		WritePath = cdir;
+		WritePath += DirectoryName;
+	}
+	else{
+		WritePath = m_evPath;
+	}
 
 	CFileFind find;
-	CString WritePath = cdir; WritePath += DirectoryName;
 	if (!PathFileExists(WritePath)){
 		CreateDirectory(WritePath, NULL);
 	}
@@ -622,7 +652,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr,
 	double buffer_double = 0;
 	float buffer_float;
 	double bit = pow(2, bitdepth - 1);
-	__int64 writelength = samplesize / ((bitdepth / 8) * 2);
+	unsigned __int64 writelength = samplesize / ((bitdepth / 8) * 2);
 	__int64 fillsize = (section_1 + 1)*Times - (writelength % ((section_1 + 1)*Times));
 	for (int i = 0; i < fillsize; i++){
 		fwrite(&buffer_double, 8, 1, tmpl);
@@ -677,23 +707,24 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr,
 //FFTプラン初期化
 //FFT FIRで処理は削減しているものの、アップサンプリングの最後の方ではさすがにFFTサイズが大きく、処理が重い
 //FFTW_Wisdomや、CPU拡張命令を試したが、目に見える改善はせず。要対策。
-void CPCMDSD_ConverterDlg::FFTInit(fftw_plan *plan, __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout){
+void CPCMDSD_ConverterDlg::FFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout){
 	fftw_plan_with_nthreads(omp_get_max_threads() / 2);
-	*plan = fftw_plan_dft_r2c_1d(int(fftsize / Times), fftin, ifftout, FFTW_ESTIMATE);	
+	*plan = fftw_plan_dft_r2c_1d(int(fftsize / Times), fftin, ifftout, FFTW_ESTIMATE);
+
 }
-void CPCMDSD_ConverterDlg::iFFTInit(fftw_plan *plan, __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout){
+void CPCMDSD_ConverterDlg::iFFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout){
 	fftw_plan_with_nthreads(omp_get_max_threads() / 2);
 	*plan = fftw_plan_dft_c2r_1d(int(fftsize / Times), ifftin, fftout, FFTW_ESTIMATE);
 }
 
-//PCM-DSD変換
+//FIRフィルタ版PCM-DSD変換
 bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Times, omp_lock_t *myLock){
 	//FIRフィルタ係数読み込み
 	//タップ数は2^N-1
 	ifstream ifs(".\\FIRFilter.dat");
 	int section_1 = 0;
 	string str;
-	__int64 samplesize;
+	unsigned __int64 samplesize;
 	if (ifs.fail())
 	{
 		return false;
@@ -701,7 +732,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	getline(ifs, str);
 	section_1 = atoi(str.c_str());
 	double *firfilter_table = new double[section_1];
-	__int64 i = 0;
+	unsigned __int64  i = 0;
 	while (getline(ifs, str))
 	{
 		firfilter_table[i] = atof(str.c_str());
@@ -718,21 +749,25 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	//この時、x(L),h(N),FFT(M)としたとき、M>=L+N-1になる必要があるので
 	//最終アップサンプリング時にM=2*L=2*(M+1)となるように定義
 	const int logtimes = int(log(Times) / log(2));
-	const int fftsize = (section_1 + 1) * Times;
-	const int datasize = fftsize / 2;
+	const unsigned __int64 fftsize = (section_1 + 1) * Times;
+	const unsigned __int64 datasize = fftsize / 2;
 	int *nowfftsize = new int[logtimes];
 	int *zerosize = new int[logtimes];
 	int *puddingsize = new int[logtimes];
 	int *realfftsize = new int[logtimes];
-	double *gain = new double[logtimes];
+	int *addsize = new int[logtimes];
+	double gain = 1;
 	double *buffer = new double[fftsize];
 	double *databuffer = new double[datasize];
 	double **prebuffer = new double*[logtimes];
 
-	unsigned char *out = new unsigned char[unsigned int(datasize)];
+	unsigned char *out = new unsigned char[unsigned __int64(datasize)];
+	//8次ノイズシェーピングの係数はXLDより拝借 https://code.google.com/p/xld/source/detail?r=336
 	double shaper_coeffs_8th_b[8] = { 8.036523104430531e-01, -5.294484548544922e+00, 1.497412386332955e+01, -2.356658330575455e+01, 2.228874261804205e+01, -1.266723038877453e+01, 4.005297650249176e+00, -5.435177297167231e-01 };
 	double shaper_coeffs_8th_a[8] = { -7.193145776600000e+00, 2.268630685861116e+01, -4.097785898127190e+01, 4.636939574322227e+01, -3.366324022655938e+01, 1.531356101838154e+01, -3.991500436793876e+00, 4.564822702832769e-01 };
-
+	for (i = 0; i < datasize; i++){
+		out[i] = 0;
+	}
 	double quantizer_in = 0;
 	double next = 0;
 	double deltabuffer[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -740,7 +775,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	double deltagain = 0.5;
 
 	// FIR FFT用変数
-	fftw_set_timelimit(5);
+	fftw_set_timelimit(10);
 	double **fftin = (double**)fftw_malloc(sizeof(double) * logtimes);
 	fftw_complex **fftout = (fftw_complex**)fftw_malloc(sizeof(fftw_complex) * logtimes);
 	fftw_complex **ifftin = (fftw_complex**)fftw_malloc(sizeof(fftw_complex) * logtimes);
@@ -749,7 +784,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 
 	fftw_plan *FFT = (fftw_plan*)fftw_malloc(sizeof(fftw_plan) * (logtimes));
 	fftw_plan *iFFT = (fftw_plan*)fftw_malloc(sizeof(fftw_plan) * (logtimes));
-	
+
 	int p = 0;
 	int k = 0;
 	int t = 0;
@@ -757,17 +792,17 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	for (i = 1; i < Times; i = i * 2){
 		nowfftsize[p] = int(fftsize / (Times / (i * 2)));
 		realfftsize[p] = nowfftsize[p] / 2 + 1;
-		gain[p] = (double)2.0 / nowfftsize[p];
-		zerosize[p] = nowfftsize[p] / 2;
-		puddingsize[p] = nowfftsize[p] - zerosize[p];
-
+		zerosize[p] = nowfftsize[p] / 4;
+		puddingsize[p] = nowfftsize[p] - zerosize[p] * 2;
+		gain = gain*(2.0 / nowfftsize[p]);
+		addsize[p] = zerosize[p] * 2;
 		prebuffer[p] = new double[fftsize];
 
-		firfilter_table_fft[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * int(fftsize / i));
-		fftin[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * int(fftsize / i));
-		fftout[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * int(fftsize / i));
-		ifftin[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * int((fftsize / i + 1) / 2 + 1));
-		ifftout[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * int(fftsize / i));
+		firfilter_table_fft[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned __int64(fftsize / i));
+		fftin[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * unsigned __int64(fftsize / i));
+		fftout[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned __int64(fftsize / i));
+		ifftin[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned __int64((fftsize / i + 1) / 2 + 1));
+		ifftout[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * unsigned __int64(fftsize / i));
 
 		for (k = 0; k < fftsize / i; k++){
 			fftin[logtimes - p - 1][k] = 0;
@@ -807,19 +842,29 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 			firfilter_table_fft[logtimes - i - 1][p][1] = fftout[logtimes - i - 1][p][1];
 		}
 	}
+	deltagain = gain*0.5;
+	//LARGE_INTEGER cpuFreq;
+	//LARGE_INTEGER count1, count2, count3, count4;
 
-	__int64 SplitNum = (samplesize / datasize)*Times;
+	//QueryPerformanceFrequency(&cpuFreq);
+
+	//QueryPerformanceCounter(&count1);
+	unsigned __int64 SplitNum = (samplesize / datasize)*Times;
+	int a = 0;
+	//for (a = 0; a < 6; a++){
 	//Convolution&UpSampling
 	for (i = 0; i < SplitNum; i++){
-		m_dProgress.Process(int(i + 1), int(SplitNum));//子ダイアログのプログレスバーに値を投げる
+		m_dProgress.Process(i + 1, SplitNum);//子ダイアログのプログレスバーに値を投げる
 		fread(buffer, 8, datasize / Times, OrigData);
 		for (t = 0; t < logtimes; t++){
+			q = 0;
 			for (p = 0; p < zerosize[t]; p++){
-				fftin[t][p] = buffer[p / 2];
-				p++;
-				fftin[t][p] = 0;
+				fftin[t][q] = buffer[p];
+				q++;
+				fftin[t][q] = 0;
+				q++;
 			}
-			for (p = zerosize[t]; p < nowfftsize[t]; p++){
+			for (p = q; p < nowfftsize[t]; p++){
 				fftin[t][p] = 0;
 			}
 			fftw_execute(FFT[t]);
@@ -829,11 +874,11 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 			}
 			fftw_execute(iFFT[t]);
 			for (p = 0; p < nowfftsize[t]; p++){
-				buffer[p] = ifftout[t][p] * gain[t];
+				buffer[p] = ifftout[t][p];
 			}
 			for (p = 0; p < puddingsize[t]; p++){
 				buffer[p] = prebuffer[t][p] + buffer[p];
-				prebuffer[t][p] = buffer[zerosize[t] + p];
+				prebuffer[t][p] = buffer[addsize[t] + p];
 			}
 		}
 		//1bit化
@@ -878,6 +923,18 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 		fwrite(out, 1, datasize, UpSampleData);
 		if (!m_dProgress.Cancelbottun) return false;//子ダイアログで中止ボタンが押された
 	}
+	//	/*QueryPerformanceCounter(&count3);
+	//	_fseeki64(OrigData, 0, SEEK_SET);
+	//	_fseeki64(UpSampleData, 0, SEEK_SET);
+	//	QueryPerformanceCounter(&count4);*/
+	//}
+	//QueryPerformanceCounter(&count2);
+
+	//CStringW Timeword;
+	//double time = 1000.0*(((double)count2.QuadPart - count1.QuadPart - (count3.QuadPart - count4.QuadPart) * 6) / (cpuFreq.QuadPart * 6));
+	//Timeword.Format(L"%gms", time);
+	//MessageBox(Timeword, L"計測結果", MB_OK);
+
 
 	//お掃除
 	for (i = 0; i < logtimes; i++){
@@ -901,12 +958,180 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	delete[] zerosize;
 	delete[] puddingsize;
 	delete[] realfftsize;
-	delete[] gain;
 	delete[] out;
 	delete[] databuffer;
 	delete[] prebuffer;
 	delete[] buffer;
 	delete[] firfilter_table;
+	return true;
+}
+
+//IIRフィルタ版軽量PCM-DSD変換
+bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, int Times){
+	unsigned __int64 samplesize;
+	_fseeki64(OrigData, 0, SEEK_END);
+	samplesize = _ftelli64(OrigData);
+	_fseeki64(OrigData, 0, SEEK_SET);
+	samplesize = samplesize / 8;
+	__int64 SplitNum = 4096;
+	const int logtimes = int(log(Times) / log(2));
+	const unsigned __int64 datasize = unsigned __int64(samplesize / SplitNum);
+	const unsigned __int64 Updatasize = datasize*Times;
+	double *buffer = new double[Updatasize];
+	double *databuffer = new double[Updatasize];
+
+	unsigned char *out = new unsigned char[unsigned __int64(Updatasize)];
+	//8次ノイズシェーピングの係数はXLDより拝借 https://code.google.com/p/xld/source/detail?r=336
+	double shaper_coeffs_8th_b[8] = { 8.036523104430531e-01, -5.294484548544922e+00, 1.497412386332955e+01, -2.356658330575455e+01, 2.228874261804205e+01, -1.266723038877453e+01, 4.005297650249176e+00, -5.435177297167231e-01 };
+	double shaper_coeffs_8th_a[8] = { -7.193145776600000e+00, 2.268630685861116e+01, -4.097785898127190e+01, 4.636939574322227e+01, -3.366324022655938e+01, 1.531356101838154e+01, -3.991500436793876e+00, 4.564822702832769e-01 };
+
+	double quantizer_in = 0;
+	double next = 0;
+	double deltabuffer[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	double err = 0;
+	double deltagain = Times / 2;
+	//FIRフィルタ係数読み込み
+	//タップ数は2^N-1
+	int section_1 = 0;
+	__int64 i = 0;
+	ifstream ifs(".\\IIRFilter.dat");
+	string str;
+	int s = 0;
+	if (ifs.fail())
+	{
+		exit(EXIT_FAILURE);
+	}
+	getline(ifs, str);
+	section_1 = atoi(str.c_str());
+	getline(ifs, str);
+	double **iirfilter_table = new double*[section_1];
+	for (i = 0; i < section_1; i++){
+		iirfilter_table[i] = new double[5];
+	}
+	i = 0;
+	while (getline(ifs, str))
+	{
+		if (str != ""){
+			iirfilter_table[i][s] = atof(str.c_str());
+			s++;
+		}
+		else{
+			s = 0;
+			i++;
+		}
+	}
+	ifs.close();
+	double *nowdatasize = new double[logtimes];
+	double ***qe_1 = new double**[logtimes];
+	for (i = 0; i < logtimes; i++){
+		nowdatasize[i] = datasize*pow(2, i + 1);
+		qe_1[i] = new double*[section_1];
+		for (s = 0; s < section_1; s++){
+			qe_1[i][s] = new double[3];
+			qe_1[i][s][0] = 0; qe_1[i][s][1] = 0; qe_1[i][s][2] = 0;
+		}
+	}
+	double tmp_iir = 0;
+	int x = 0;
+	//LARGE_INTEGER cpuFreq;
+	//LARGE_INTEGER count1, count2, count3, count4;
+
+	//QueryPerformanceFrequency(&cpuFreq);
+
+	//QueryPerformanceCounter(&count1);
+	int a = 0; int q = 0; int t = 0; s = 0;
+	/*for (a = 0; a < 6; a++){*/
+	//Convolution&UpSampling
+	for (i = 0; i < SplitNum; i++){
+		m_dProgress.Process(i + 1, SplitNum);//子ダイアログのプログレスバーに値を投げる
+		fread(databuffer, 8, datasize, OrigData);
+		s = 0;
+		for (t = 0; t < logtimes; t++){
+			for (q = 0; q < nowdatasize[t]; q++){
+				buffer[q] = databuffer[q / 2];
+				q++;
+				buffer[q] = 0;
+			}
+			for (q = 0; q < nowdatasize[t]; q++){
+				tmp_iir = buffer[q];
+				for (x = 0; x < section_1; x++){
+					qe_1[s][x][0] = iirfilter_table[x][0] * tmp_iir - iirfilter_table[x][1] * qe_1[s][x][1] - iirfilter_table[x][2] * qe_1[s][x][2];
+					tmp_iir = iirfilter_table[x][3] * qe_1[s][x][0] + iirfilter_table[x][4] * qe_1[s][x][1] + iirfilter_table[x][5] * qe_1[s][x][2];
+					qe_1[s][x][2] = qe_1[s][x][1];
+					qe_1[s][x][1] = qe_1[s][x][0];
+				}
+				buffer[q] = tmp_iir;
+				databuffer[q] = tmp_iir;
+			}
+			s++;
+		}
+		//1bit化
+		for (q = 0; q < Updatasize; q++){
+			quantizer_in = buffer[q] * deltagain +
+				deltabuffer[0] * shaper_coeffs_8th_b[0] +
+				deltabuffer[1] * shaper_coeffs_8th_b[1] +
+				deltabuffer[2] * shaper_coeffs_8th_b[2] +
+				deltabuffer[3] * shaper_coeffs_8th_b[3] +
+				deltabuffer[4] * shaper_coeffs_8th_b[4] +
+				deltabuffer[5] * shaper_coeffs_8th_b[5] +
+				deltabuffer[6] * shaper_coeffs_8th_b[6] +
+				deltabuffer[7] * shaper_coeffs_8th_b[7];
+			next =
+				deltabuffer[0] * shaper_coeffs_8th_a[0] +
+				deltabuffer[1] * shaper_coeffs_8th_a[1] +
+				deltabuffer[2] * shaper_coeffs_8th_a[2] +
+				deltabuffer[3] * shaper_coeffs_8th_a[3] +
+				deltabuffer[4] * shaper_coeffs_8th_a[4] +
+				deltabuffer[5] * shaper_coeffs_8th_a[5] +
+				deltabuffer[6] * shaper_coeffs_8th_a[6] +
+				deltabuffer[7] * shaper_coeffs_8th_a[7];
+
+			if (quantizer_in < 0) {
+				err = quantizer_in + 1.0;
+				out[q] = 0;
+			}
+			else {
+				err = quantizer_in - 1.0;
+				out[q] = 1;
+			}
+
+			deltabuffer[7] = deltabuffer[6];
+			deltabuffer[6] = deltabuffer[5];
+			deltabuffer[5] = deltabuffer[4];
+			deltabuffer[4] = deltabuffer[3];
+			deltabuffer[3] = deltabuffer[2];
+			deltabuffer[2] = deltabuffer[1];
+			deltabuffer[1] = deltabuffer[0];
+			deltabuffer[0] = err - next;
+		}
+		fwrite(out, 1, Updatasize, UpSampleData);
+		if (!m_dProgress.Cancelbottun) return false;//子ダイアログで中止ボタンが押された
+	}
+	/*	QueryPerformanceCounter(&count3);
+		_fseeki64(OrigData, 0, SEEK_SET);
+		_fseeki64(UpSampleData, 0, SEEK_SET);
+		QueryPerformanceCounter(&count4);
+		}
+		QueryPerformanceCounter(&count2);
+
+		CStringW Timeword;
+		double time = 1000.0*(((double)count2.QuadPart - count1.QuadPart - (count3.QuadPart - count4.QuadPart) * 6) / (cpuFreq.QuadPart * 6));
+		Timeword.Format(L"%gms", time);
+		MessageBox(Timeword, L"計測結果", MB_OK);*/
+
+	//お掃除
+	for (t = 0; t < logtimes; t++){
+		for (s = 0; s < section_1; s++){
+			delete[] qe_1[t][s];
+		}
+		delete[] qe_1[t];
+	}
+	delete[] qe_1;
+	delete[] iirfilter_table;
+	delete[] out;
+	delete[] databuffer;
+	delete[] buffer;
+	delete[] nowdatasize;
 	return true;
 }
 
@@ -957,8 +1182,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam){
 				for (int i = 0; i < Times; i++){
 					CString TimesStr;
 					TimesStr.Format(L"%d", Times);
-					TrushFile(runfile_tmp, _T("_tmpL") + TimesStr);
-					TrushFile(runfile_tmp, _T("_tmpR") + TimesStr);
+					pDlg->TrushFile(runfile_tmp, _T("_tmpL") + TimesStr);
+					pDlg->TrushFile(runfile_tmp, _T("_tmpR") + TimesStr);
 				}
 				n++;
 			}
@@ -996,8 +1221,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam){
 				for (int i = 0; i < Times; i++){
 					CString TimesStr;
 					TimesStr.Format(L"%d", Times);
-					TrushFile(runfile_tmp, _T("_tmpL") + TimesStr);
-					TrushFile(runfile_tmp, _T("_tmpR") + TimesStr);
+					pDlg->TrushFile(runfile_tmp, _T("_tmpL") + TimesStr);
+					pDlg->TrushFile(runfile_tmp, _T("_tmpR") + TimesStr);
 				}
 			}
 		}
@@ -1017,7 +1242,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam){
 bool CPCMDSD_ConverterDlg::WAV_Convert(TCHAR *filepath, int number){
 	m_dProgress.Start(filepath);
 	m_dProgress.Process(0, 100);
-
+	//精度取得
+	int Precision = m_ccPrecision.GetCurSel();
 	//DSDのサンプリングレートにするには何倍すればいいのか計算
 	int DSD_Times;
 	switch (m_cSamplingRate.GetCurSel()) {
@@ -1092,8 +1318,15 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(TCHAR *filepath, int number){
 				flagUpl = false;
 				flag = false;
 			}
-			if (flag)if (!WAV_Filter(UpsampleDataL, tmpl, Times, &myLock)){
-				flag = false;
+			if (Precision == 0){
+				if (flag)if (!WAV_Filter(UpsampleDataL, tmpl, Times, &myLock)){
+					flag = false;
+				}
+			}
+			else{
+				if (flag)if (!WAV_FilterLight(UpsampleDataL, tmpl, Times)){
+					flag = false;
+				}
 			}
 			if (flagUpl){
 				fclose(UpsampleDataL);
@@ -1119,8 +1352,15 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(TCHAR *filepath, int number){
 				flagUpr = false;
 				flag = false;
 			}
-			if (flag)if (!WAV_Filter(UpsampleDataR, tmpr, Times, &myLock)){
-				flag = false;
+			if (Precision == 0){
+				if (flag)if (!WAV_Filter(UpsampleDataR, tmpr, Times, &myLock)){
+					flag = false;
+				}
+			}
+			else{
+				if (flag)if (!WAV_FilterLight(UpsampleDataR, tmpr, Times)){
+					flag = false;
+				}
 			}
 			if (flagUpr){
 				fclose(UpsampleDataR);
@@ -1274,17 +1514,16 @@ void CPCMDSD_ConverterDlg::OnDropFiles(HDROP hDropInfo)
 void CPCMDSD_ConverterDlg::Disable(){
 	m_dProgress.EnableWindow(TRUE);
 	m_dProgress.ShowWindow(TRUE);
-	CButton *button0 = (CButton*)GetDlgItem(IDB_AllRun);
-	CButton *button1 = (CButton*)GetDlgItem(IDB_AllListDelete);
-	CButton *button2 = (CButton*)GetDlgItem(IDB_Run);
-	CButton *button3 = (CButton*)GetDlgItem(IDB_ListDelete);
-	CWnd *box = (CWnd*)GetDlgItem(IDC_SamplingRate);
 
-	button0->EnableWindow(FALSE);
-	button1->EnableWindow(FALSE);
-	button2->EnableWindow(FALSE);
-	button3->EnableWindow(FALSE);
-	box->EnableWindow(FALSE);
+	m_bAllRun.EnableWindow(FALSE);
+	m_bAllListDelete.EnableWindow(FALSE);
+	m_bRun.EnableWindow(FALSE);
+	m_bListDelete.EnableWindow(FALSE);
+	m_bcPath.EnableWindow(FALSE);
+
+	m_cSamplingRate.EnableWindow(FALSE);
+	m_ccPrecision.EnableWindow(FALSE);
+
 	DragAcceptFiles(FALSE);
 }
 
@@ -1293,17 +1532,16 @@ void CPCMDSD_ConverterDlg::Enable(){
 	m_dProgress.EnableWindow(FALSE);
 	m_dProgress.ShowWindow(FALSE);
 	m_dProgress.Cancelbottun = true;
-	CButton *button0 = (CButton*)GetDlgItem(IDB_AllRun);
-	CButton *button1 = (CButton*)GetDlgItem(IDB_AllListDelete);
-	CButton *button2 = (CButton*)GetDlgItem(IDB_Run);
-	CButton *button3 = (CButton*)GetDlgItem(IDB_ListDelete);
-	CWnd *box = (CWnd*)GetDlgItem(IDC_SamplingRate);
 
-	button0->EnableWindow(TRUE);
-	button1->EnableWindow(TRUE);
-	button2->EnableWindow(TRUE);
-	button3->EnableWindow(TRUE);
-	box->EnableWindow(TRUE);
+	m_bAllRun.EnableWindow(TRUE);
+	m_bAllListDelete.EnableWindow(TRUE);
+	m_bRun.EnableWindow(TRUE);
+	m_bListDelete.EnableWindow(TRUE);
+	m_bcPath.EnableWindow(TRUE);
+
+	m_cSamplingRate.EnableWindow(TRUE);
+	m_ccPrecision.EnableWindow(TRUE);
+
 	DragAcceptFiles(TRUE);
 }
 
@@ -1345,10 +1583,39 @@ void CPCMDSD_ConverterDlg::OnBnClickedListdelete()
 	}
 }
 
-//DSDサンプリングレートコンボボックス
-void CPCMDSD_ConverterDlg::OnCbnSelchangeSamplingrate()
+//参照,ここから丸パクリ http://www.jade.dti.ne.jp/~arino/sample6.htm
+void CPCMDSD_ConverterDlg::OnBnClickedPathcheck()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+	BROWSEINFO bInfo;
+	LPITEMIDLIST pIDList;
+	TCHAR szDisplayName[MAX_PATH];
+
+	// BROWSEINFO構造体に値を設定
+	bInfo.hwndOwner = AfxGetMainWnd()->m_hWnd;		// ダイアログの親ウインドウのハンドル
+	bInfo.pidlRoot = NULL;						// ルートフォルダを示すITEMIDLISTのポインタ (NULLの場合デスクトップフォルダが使われます）
+	bInfo.pszDisplayName = szDisplayName;				// 選択されたフォルダ名を受け取るバッファのポインタ
+	bInfo.lpszTitle = _T("フォルダの選択");		// ツリービューの上部に表示される文字列 
+	bInfo.ulFlags = BIF_RETURNONLYFSDIRS;		// 表示されるフォルダの種類を示すフラグ
+	bInfo.lpfn = NULL;						// BrowseCallbackProc関数のポインタ
+	bInfo.lParam = (LPARAM)0;					// コールバック関数に渡す値
+
+	// フォルダ選択ダイアログを表示
+	pIDList = ::SHBrowseForFolder(&bInfo);
+	if (pIDList == NULL){
+
+		// 戻り値がNULLの場合、フォルダが選択されずにダイアログが閉じられたことを意味します。
+
+	}
+	else{
+		// ItemIDListをパス名に変換します
+		if (!::SHGetPathFromIDList(pIDList, szDisplayName)){
+		}
+		m_evPath = szDisplayName;
+		// 最後にpIDListのポイントしているメモリを開放します
+		::CoTaskMemFree(pIDList);
+		UpdateData(FALSE);
+	}
 }
 
 //閉じる動作をオーバーライド
