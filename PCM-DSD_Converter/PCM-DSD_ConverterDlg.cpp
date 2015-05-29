@@ -6,7 +6,6 @@
 #include "PCM-DSD_Converter.h"
 #include "PCM-DSD_ConverterDlg.h"
 #include "afxdialogex.h"
-#include <fstream>
 using namespace std;
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -83,6 +82,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 		m_ccPrecision.SetCurSel(0);
 		DragAcceptFiles();
 		ListInit();
+		fftw_init_threads();
 		m_dProgress.Create(ProgressDlg::IDD, this);
 	}
 	return TRUE;  // フォーカスをコントロールに設定した場合を除き、TRUE を返します。
@@ -707,22 +707,21 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr,
 //FFTプラン初期化
 //FFT FIRで処理は削減しているものの、アップサンプリングの最後の方ではさすがにFFTサイズが大きく、処理が重い
 //FFTW_Wisdomや、CPU拡張命令を試したが、目に見える改善はせず。要対策。
-void CPCMDSD_ConverterDlg::FFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout){
-	fftw_plan_with_nthreads(omp_get_max_threads() / 2);
+void CPCMDSD_ConverterDlg::FFTInit(fftw_plan *plan, unsigned int fftsize, int Times, double *fftin, fftw_complex *ifftout){
+	fftw_plan_with_nthreads(omp_get_num_procs() / 2);
 	*plan = fftw_plan_dft_r2c_1d(int(fftsize / Times), fftin, ifftout, FFTW_ESTIMATE);
-
 }
-void CPCMDSD_ConverterDlg::iFFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout){
-	fftw_plan_with_nthreads(omp_get_max_threads() / 2);
+void CPCMDSD_ConverterDlg::iFFTInit(fftw_plan *plan, unsigned int fftsize, int Times, fftw_complex *ifftin, double *fftout){
+	fftw_plan_with_nthreads(omp_get_num_procs() / 2);
 	*plan = fftw_plan_dft_c2r_1d(int(fftsize / Times), ifftin, fftout, FFTW_ESTIMATE);
 }
 
 //FIRフィルタ版PCM-DSD変換
-bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Times, omp_lock_t *myLock){
+bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, unsigned int Times, omp_lock_t *myLock){
 	//FIRフィルタ係数読み込み
 	//タップ数は2^N-1
 	ifstream ifs(".\\FIRFilter.dat");
-	int section_1 = 0;
+	unsigned int section_1 = 0;
 	string str;
 	unsigned __int64 samplesize;
 	if (ifs.fail())
@@ -732,7 +731,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	getline(ifs, str);
 	section_1 = atoi(str.c_str());
 	double *firfilter_table = new double[section_1];
-	unsigned __int64  i = 0;
+	unsigned __int32 i = 0;
 	while (getline(ifs, str))
 	{
 		firfilter_table[i] = atof(str.c_str());
@@ -746,22 +745,22 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	samplesize = samplesize / 8;
 
 	//FFT Overlap add Methodを用いたFIRフィルタ畳みこみ演算
-	//この時、x(L),h(N),FFT(M)としたとき、M>=L+N-1になる必要があるので
-	//最終アップサンプリング時にM=2*L=2*(M+1)となるように定義
-	const int logtimes = int(log(Times) / log(2));
-	const unsigned __int64 fftsize = (section_1 + 1) * Times;
-	const unsigned __int64 datasize = fftsize / 2;
-	int *nowfftsize = new int[logtimes];
-	int *zerosize = new int[logtimes];
-	int *puddingsize = new int[logtimes];
-	int *realfftsize = new int[logtimes];
-	int *addsize = new int[logtimes];
-	double gain = 1;
-	double *buffer = new double[fftsize];
-	double *databuffer = new double[datasize];
+	//x(L),h(N),FFT(M)としたとき、M>=L+N-1になる必要があるので
+	//最終アップサンプリング時にM=2*L=2*(N+1)となるように定義
+	const unsigned int logtimes = unsigned int(log(Times) / log(2));
+	const unsigned int fftsize = (section_1 + 1) * Times;
+	const unsigned int datasize = fftsize / 2;
+	unsigned int *nowfftsize = new  unsigned int[logtimes];
+	unsigned int *zerosize = new  unsigned int[logtimes];
+	unsigned int *puddingsize = new  unsigned int[logtimes];
+	unsigned int *realfftsize = new unsigned int[logtimes];
+	unsigned int *addsize = new  unsigned int[logtimes];
 	double **prebuffer = new double*[logtimes];
+	double gain = 1;
 
-	unsigned char *out = new unsigned char[unsigned __int64(datasize)];
+	double *buffer = new double[fftsize];
+	unsigned char *out = new unsigned char[datasize];
+
 	//8次ノイズシェーピングの係数はXLDより拝借 https://code.google.com/p/xld/source/detail?r=336
 	double shaper_coeffs_8th_b[8] = { 8.036523104430531e-01, -5.294484548544922e+00, 1.497412386332955e+01, -2.356658330575455e+01, 2.228874261804205e+01, -1.266723038877453e+01, 4.005297650249176e+00, -5.435177297167231e-01 };
 	double shaper_coeffs_8th_a[8] = { -7.193145776600000e+00, 2.268630685861116e+01, -4.097785898127190e+01, 4.636939574322227e+01, -3.366324022655938e+01, 1.531356101838154e+01, -3.991500436793876e+00, 4.564822702832769e-01 };
@@ -775,7 +774,6 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	double deltagain = 0.5;
 
 	// FIR FFT用変数
-	fftw_set_timelimit(10);
 	double **fftin = (double**)fftw_malloc(sizeof(double) * logtimes);
 	fftw_complex **fftout = (fftw_complex**)fftw_malloc(sizeof(fftw_complex) * logtimes);
 	fftw_complex **ifftin = (fftw_complex**)fftw_malloc(sizeof(fftw_complex) * logtimes);
@@ -785,24 +783,24 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	fftw_plan *FFT = (fftw_plan*)fftw_malloc(sizeof(fftw_plan) * (logtimes));
 	fftw_plan *iFFT = (fftw_plan*)fftw_malloc(sizeof(fftw_plan) * (logtimes));
 
-	int p = 0;
-	int k = 0;
-	int t = 0;
-	int q = 0;
+	unsigned int p = 0;
+	unsigned int k = 0;
+	unsigned int t = 0;
+	unsigned int q = 0;
 	for (i = 1; i < Times; i = i * 2){
-		nowfftsize[p] = int(fftsize / (Times / (i * 2)));
+		nowfftsize[p] = fftsize / (Times / (i * 2));
 		realfftsize[p] = nowfftsize[p] / 2 + 1;
 		zerosize[p] = nowfftsize[p] / 4;
 		puddingsize[p] = nowfftsize[p] - zerosize[p] * 2;
 		gain = gain*(2.0 / nowfftsize[p]);
 		addsize[p] = zerosize[p] * 2;
-		prebuffer[p] = new double[fftsize];
 
-		firfilter_table_fft[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned __int64(fftsize / i));
-		fftin[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * unsigned __int64(fftsize / i));
-		fftout[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned __int64(fftsize / i));
-		ifftin[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned __int64((fftsize / i + 1) / 2 + 1));
-		ifftout[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * unsigned __int64(fftsize / i));
+		prebuffer[p] = new double[fftsize];
+		firfilter_table_fft[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned int(fftsize / i));
+		fftin[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * unsigned int(fftsize / i));
+		fftout[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned int(fftsize / i));
+		ifftin[logtimes - p - 1] = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * unsigned int((fftsize / i + 1) / 2 + 1));
+		ifftout[logtimes - p - 1] = (double*)fftw_malloc(sizeof(double) * unsigned int(fftsize / i));
 
 		for (k = 0; k < fftsize / i; k++){
 			fftin[logtimes - p - 1][k] = 0;
@@ -820,6 +818,7 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	p = 0;
 	//!!!FFTW3ライブラリに同時アクセスすると落ちる
 	omp_set_lock(myLock);
+	//fftw_plan_with_nthreads(omp_get_num_procs() / 2);
 	for (i = 1; i < Times; i = i * 2){
 		FFTInit(&FFT[logtimes - p - 1], fftsize, int(i), fftin[logtimes - p - 1], fftout[logtimes - p - 1]);
 		iFFTInit(&iFFT[logtimes - p - 1], fftsize, int(i), ifftin[logtimes - p - 1], ifftout[logtimes - p - 1]);
@@ -842,91 +841,96 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 			firfilter_table_fft[logtimes - i - 1][p][1] = fftout[logtimes - i - 1][p][1];
 		}
 	}
+	unsigned int SplitNum = unsigned int((samplesize / datasize)*Times);
 	deltagain = gain*0.5;
-	//LARGE_INTEGER cpuFreq;
-	//LARGE_INTEGER count1, count2, count3, count4;
+	
+	/*LARGE_INTEGER cpuFreq;
+	LARGE_INTEGER count1, count2, count3, count4;
+	QueryPerformanceFrequency(&cpuFreq);
 
-	//QueryPerformanceFrequency(&cpuFreq);
+	QueryPerformanceCounter(&count1);
 
-	//QueryPerformanceCounter(&count1);
-	unsigned __int64 SplitNum = (samplesize / datasize)*Times;
+	
 	int a = 0;
-	//for (a = 0; a < 6; a++){
-	//Convolution&UpSampling
-	for (i = 0; i < SplitNum; i++){
-		m_dProgress.Process(i + 1, SplitNum);//子ダイアログのプログレスバーに値を投げる
-		fread(buffer, 8, datasize / Times, OrigData);
-		for (t = 0; t < logtimes; t++){
-			q = 0;
-			for (p = 0; p < zerosize[t]; p++){
-				fftin[t][q] = buffer[p];
-				q++;
-				fftin[t][q] = 0;
-				q++;
+	for (a = 0; a < 6; a++){
+	*/	//Convolution&UpSampling
+		for (i = 0; i < SplitNum; i++){
+			m_dProgress.Process(i + 1, SplitNum);//子ダイアログのプログレスバーに値を投げる
+			fread(buffer, 8, datasize / Times, OrigData);
+			for (t = 0; t < logtimes; t++){
+				q = 0;
+				for (p = 0; p < zerosize[t]; p++){
+					fftin[t][q] = buffer[p];
+					q++;
+					fftin[t][q] = 0;
+					q++;
+				}
+				memset(fftin[t] + q, 0, 8 * (nowfftsize[t] - q));
+				/*for (p = q; p < nowfftsize[t]; p++){
+					fftin[t][p] = 0;
+					}*/
+				fftw_execute(FFT[t]);
+				for (p = 0; p < realfftsize[t]; p++){
+					ifftin[t][p][0] = fftout[t][p][0] * firfilter_table_fft[t][p][0] - fftout[t][p][1] * firfilter_table_fft[t][p][1];
+					ifftin[t][p][1] = fftout[t][p][0] * firfilter_table_fft[t][p][1] + firfilter_table_fft[t][p][0] * fftout[t][p][1];
+				}
+				fftw_execute(iFFT[t]);
+				for (p = 0; p < puddingsize[t]; p++){
+					buffer[p] = prebuffer[t][p] + ifftout[t][p];
+				}
+				q = 0;
+				for (p = puddingsize[t]; p < nowfftsize[t]; p++){
+					buffer[p] = prebuffer[t][q] = ifftout[t][p];
+					q++;
+				}
 			}
-			for (p = q; p < nowfftsize[t]; p++){
-				fftin[t][p] = 0;
-			}
-			fftw_execute(FFT[t]);
-			for (p = 0; p < realfftsize[t]; p++){
-				ifftin[t][p][0] = fftout[t][p][0] * firfilter_table_fft[t][p][0] - fftout[t][p][1] * firfilter_table_fft[t][p][1];
-				ifftin[t][p][1] = fftout[t][p][0] * firfilter_table_fft[t][p][1] + firfilter_table_fft[t][p][0] * fftout[t][p][1];
-			}
-			fftw_execute(iFFT[t]);
-			for (p = 0; p < nowfftsize[t]; p++){
-				buffer[p] = ifftout[t][p];
-			}
-			for (p = 0; p < puddingsize[t]; p++){
-				buffer[p] = prebuffer[t][p] + buffer[p];
-				prebuffer[t][p] = buffer[addsize[t] + p];
-			}
-		}
-		//1bit化
-		for (q = 0; q < datasize; q++){
-			quantizer_in = buffer[q] * deltagain +
-				deltabuffer[0] * shaper_coeffs_8th_b[0] +
-				deltabuffer[1] * shaper_coeffs_8th_b[1] +
-				deltabuffer[2] * shaper_coeffs_8th_b[2] +
-				deltabuffer[3] * shaper_coeffs_8th_b[3] +
-				deltabuffer[4] * shaper_coeffs_8th_b[4] +
-				deltabuffer[5] * shaper_coeffs_8th_b[5] +
-				deltabuffer[6] * shaper_coeffs_8th_b[6] +
-				deltabuffer[7] * shaper_coeffs_8th_b[7];
-			next =
-				deltabuffer[0] * shaper_coeffs_8th_a[0] +
-				deltabuffer[1] * shaper_coeffs_8th_a[1] +
-				deltabuffer[2] * shaper_coeffs_8th_a[2] +
-				deltabuffer[3] * shaper_coeffs_8th_a[3] +
-				deltabuffer[4] * shaper_coeffs_8th_a[4] +
-				deltabuffer[5] * shaper_coeffs_8th_a[5] +
-				deltabuffer[6] * shaper_coeffs_8th_a[6] +
-				deltabuffer[7] * shaper_coeffs_8th_a[7];
+			//1bit化
 
-			if (quantizer_in < 0) {
-				err = quantizer_in + 1.0;
-				out[q] = 0;
-			}
-			else {
-				err = quantizer_in - 1.0;
-				out[q] = 1;
-			}
+			for (q = 0; q < datasize; q++){
+				quantizer_in = buffer[q] * deltagain +
+					deltabuffer[0] * shaper_coeffs_8th_b[0] +
+					deltabuffer[1] * shaper_coeffs_8th_b[1] +
+					deltabuffer[2] * shaper_coeffs_8th_b[2] +
+					deltabuffer[3] * shaper_coeffs_8th_b[3] +
+					deltabuffer[4] * shaper_coeffs_8th_b[4] +
+					deltabuffer[5] * shaper_coeffs_8th_b[5] +
+					deltabuffer[6] * shaper_coeffs_8th_b[6] +
+					deltabuffer[7] * shaper_coeffs_8th_b[7];
+				next =
+					deltabuffer[0] * shaper_coeffs_8th_a[0] +
+					deltabuffer[1] * shaper_coeffs_8th_a[1] +
+					deltabuffer[2] * shaper_coeffs_8th_a[2] +
+					deltabuffer[3] * shaper_coeffs_8th_a[3] +
+					deltabuffer[4] * shaper_coeffs_8th_a[4] +
+					deltabuffer[5] * shaper_coeffs_8th_a[5] +
+					deltabuffer[6] * shaper_coeffs_8th_a[6] +
+					deltabuffer[7] * shaper_coeffs_8th_a[7];
 
-			deltabuffer[7] = deltabuffer[6];
-			deltabuffer[6] = deltabuffer[5];
-			deltabuffer[5] = deltabuffer[4];
-			deltabuffer[4] = deltabuffer[3];
-			deltabuffer[3] = deltabuffer[2];
-			deltabuffer[2] = deltabuffer[1];
-			deltabuffer[1] = deltabuffer[0];
-			deltabuffer[0] = err - next;
+				if (quantizer_in < 0.0) {
+					err = quantizer_in + 1.0;
+					out[q] = 0;
+				}
+				else {
+					err = quantizer_in - 1.0;
+					out[q] = 1;
+				}
+
+				deltabuffer[7] = deltabuffer[6];
+				deltabuffer[6] = deltabuffer[5];
+				deltabuffer[5] = deltabuffer[4];
+				deltabuffer[4] = deltabuffer[3];
+				deltabuffer[3] = deltabuffer[2];
+				deltabuffer[2] = deltabuffer[1];
+				deltabuffer[1] = deltabuffer[0];
+				deltabuffer[0] = err - next;
+			}
+			fwrite(out, 1, datasize, UpSampleData);
+			if (!m_dProgress.Cancelbottun) return false;//子ダイアログで中止ボタンが押された
 		}
-		fwrite(out, 1, datasize, UpSampleData);
-		if (!m_dProgress.Cancelbottun) return false;//子ダイアログで中止ボタンが押された
-	}
-	//	/*QueryPerformanceCounter(&count3);
+	//	QueryPerformanceCounter(&count3);
 	//	_fseeki64(OrigData, 0, SEEK_SET);
 	//	_fseeki64(UpSampleData, 0, SEEK_SET);
-	//	QueryPerformanceCounter(&count4);*/
+	//	QueryPerformanceCounter(&count4);
 	//}
 	//QueryPerformanceCounter(&count2);
 
@@ -959,7 +963,6 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 	delete[] puddingsize;
 	delete[] realfftsize;
 	delete[] out;
-	delete[] databuffer;
 	delete[] prebuffer;
 	delete[] buffer;
 	delete[] firfilter_table;
@@ -967,20 +970,20 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Ti
 }
 
 //IIRフィルタ版軽量PCM-DSD変換
-bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, int Times){
+bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, unsigned int Times){
 	unsigned __int64 samplesize;
 	_fseeki64(OrigData, 0, SEEK_END);
 	samplesize = _ftelli64(OrigData);
 	_fseeki64(OrigData, 0, SEEK_SET);
 	samplesize = samplesize / 8;
-	__int64 SplitNum = 4096;
-	const int logtimes = int(log(Times) / log(2));
-	const unsigned __int64 datasize = unsigned __int64(samplesize / SplitNum);
-	const unsigned __int64 Updatasize = datasize*Times;
+	unsigned int SplitNum = 4096;
+	const unsigned int logtimes = unsigned int(log(Times) / log(2));
+	const unsigned int datasize = unsigned int(samplesize / SplitNum);
+	const unsigned int Updatasize = datasize*Times;
 	double *buffer = new double[Updatasize];
 	double *databuffer = new double[Updatasize];
 
-	unsigned char *out = new unsigned char[unsigned __int64(Updatasize)];
+	unsigned char *out = new unsigned char[Updatasize];
 	//8次ノイズシェーピングの係数はXLDより拝借 https://code.google.com/p/xld/source/detail?r=336
 	double shaper_coeffs_8th_b[8] = { 8.036523104430531e-01, -5.294484548544922e+00, 1.497412386332955e+01, -2.356658330575455e+01, 2.228874261804205e+01, -1.266723038877453e+01, 4.005297650249176e+00, -5.435177297167231e-01 };
 	double shaper_coeffs_8th_a[8] = { -7.193145776600000e+00, 2.268630685861116e+01, -4.097785898127190e+01, 4.636939574322227e+01, -3.366324022655938e+01, 1.531356101838154e+01, -3.991500436793876e+00, 4.564822702832769e-01 };
@@ -992,11 +995,11 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, i
 	double deltagain = Times / 2;
 	//FIRフィルタ係数読み込み
 	//タップ数は2^N-1
-	int section_1 = 0;
-	__int64 i = 0;
+	unsigned int  section_1 = 0;
+	unsigned int i = 0;
 	ifstream ifs(".\\IIRFilter.dat");
 	string str;
-	int s = 0;
+	unsigned int  s = 0;
 	if (ifs.fail())
 	{
 		exit(EXIT_FAILURE);
@@ -1006,7 +1009,7 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, i
 	getline(ifs, str);
 	double **iirfilter_table = new double*[section_1];
 	for (i = 0; i < section_1; i++){
-		iirfilter_table[i] = new double[5];
+		iirfilter_table[i] = new double[6];
 	}
 	i = 0;
 	while (getline(ifs, str))
@@ -1024,7 +1027,7 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, i
 	double *nowdatasize = new double[logtimes];
 	double ***qe_1 = new double**[logtimes];
 	for (i = 0; i < logtimes; i++){
-		nowdatasize[i] = datasize*pow(2, i + 1);
+		nowdatasize[i] = datasize*pow(2, i);
 		qe_1[i] = new double*[section_1];
 		for (s = 0; s < section_1; s++){
 			qe_1[i][s] = new double[3];
@@ -1032,27 +1035,30 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, i
 		}
 	}
 	double tmp_iir = 0;
-	int x = 0;
-	//LARGE_INTEGER cpuFreq;
-	//LARGE_INTEGER count1, count2, count3, count4;
+	unsigned int  x = 0;
+	unsigned int a = 0; unsigned int p = 0; unsigned int q = 0; unsigned int t = 0; s = 0;
+	/*LARGE_INTEGER cpuFreq;
+	LARGE_INTEGER count1, count2, count3, count4;
 
-	//QueryPerformanceFrequency(&cpuFreq);
+	QueryPerformanceFrequency(&cpuFreq);
 
-	//QueryPerformanceCounter(&count1);
-	int a = 0; int q = 0; int t = 0; s = 0;
-	/*for (a = 0; a < 6; a++){*/
+	QueryPerformanceCounter(&count1);
+
+	for (a = 0; a < 6; a++){*/
 	//Convolution&UpSampling
 	for (i = 0; i < SplitNum; i++){
 		m_dProgress.Process(i + 1, SplitNum);//子ダイアログのプログレスバーに値を投げる
 		fread(databuffer, 8, datasize, OrigData);
 		s = 0;
 		for (t = 0; t < logtimes; t++){
+			p = 0;
 			for (q = 0; q < nowdatasize[t]; q++){
-				buffer[q] = databuffer[q / 2];
-				q++;
-				buffer[q] = 0;
+				buffer[p] = databuffer[q];
+				p++;
+				buffer[p] = 0;
+				p++;
 			}
-			for (q = 0; q < nowdatasize[t]; q++){
+			for (q = 0; q < nowdatasize[t] * 2; q++){
 				tmp_iir = buffer[q];
 				for (x = 0; x < section_1; x++){
 					qe_1[s][x][0] = iirfilter_table[x][0] * tmp_iir - iirfilter_table[x][1] * qe_1[s][x][1] - iirfilter_table[x][2] * qe_1[s][x][2];
@@ -1107,23 +1113,20 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, i
 		fwrite(out, 1, Updatasize, UpSampleData);
 		if (!m_dProgress.Cancelbottun) return false;//子ダイアログで中止ボタンが押された
 	}
-	/*	QueryPerformanceCounter(&count3);
-		_fseeki64(OrigData, 0, SEEK_SET);
-		_fseeki64(UpSampleData, 0, SEEK_SET);
-		QueryPerformanceCounter(&count4);
-		}
-		QueryPerformanceCounter(&count2);
+	/*QueryPerformanceCounter(&count3);
+	_fseeki64(OrigData, 0, SEEK_SET);
+	_fseeki64(UpSampleData, 0, SEEK_SET);
+	QueryPerformanceCounter(&count4);
+	}
+	QueryPerformanceCounter(&count2);
 
-		CStringW Timeword;
-		double time = 1000.0*(((double)count2.QuadPart - count1.QuadPart - (count3.QuadPart - count4.QuadPart) * 6) / (cpuFreq.QuadPart * 6));
-		Timeword.Format(L"%gms", time);
-		MessageBox(Timeword, L"計測結果", MB_OK);*/
+	CStringW Timeword;
+	double time = 1000.0*(((double)count2.QuadPart - count1.QuadPart - (count3.QuadPart - count4.QuadPart) * 6) / (cpuFreq.QuadPart * 6));
+	Timeword.Format(L"%gms", time);
+	MessageBox(Timeword, L"計測結果", MB_OK);*/
 
 	//お掃除
 	for (t = 0; t < logtimes; t++){
-		for (s = 0; s < section_1; s++){
-			delete[] qe_1[t][s];
-		}
 		delete[] qe_1[t];
 	}
 	delete[] qe_1;
@@ -1245,28 +1248,28 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(TCHAR *filepath, int number){
 	//精度取得
 	int Precision = m_ccPrecision.GetCurSel();
 	//DSDのサンプリングレートにするには何倍すればいいのか計算
-	int DSD_Times;
+	unsigned int DSD_Times;
 	switch (m_cSamplingRate.GetCurSel()) {
 	case 0:
-		DSD_Times = (int)pow(2, 6);
+		DSD_Times = (unsigned int)pow(2, 6);
 		break;
 	case 1:
-		DSD_Times = (int)pow(2, 7);
+		DSD_Times = (unsigned int)pow(2, 7);
 		break;
 	case 2:
-		DSD_Times = (int)pow(2, 8);
+		DSD_Times = (unsigned int)pow(2, 8);
 		break;
 	case 3:
-		DSD_Times = (int)pow(2, 9);
+		DSD_Times = (unsigned int)pow(2, 9);
 		break;
 	case 4:
-		DSD_Times = (int)pow(2, 10);
+		DSD_Times = (unsigned int)pow(2, 10);
 		break;
 	case 5:
-		DSD_Times = (int)pow(2, 11);
+		DSD_Times = (unsigned int)pow(2, 11);
 		break;
 	}
-	int Times = 0;
+	unsigned int Times = 0;
 	int samplingrate = _ttoi(m_lFileList.GetItemText(number, 1));
 	if (0 == samplingrate % 44100){
 		Times = DSD_Times / (samplingrate / 44100);

@@ -54,10 +54,10 @@ void ProgressDlg::Start(TCHAR *Path){
 }
 
 //プログレスバー管理
-void ProgressDlg::Process(unsigned __int64 percent, unsigned __int64 position){
+void ProgressDlg::Process(unsigned int percent, unsigned int position){
 	TCHAR *tchstr;
-	m_pProgress.SetRange32(0, int(position));
-	m_pProgress.SetPos(int(percent));
+	m_pProgress.SetRange32(0, position);
+	m_pProgress.SetPos(percent);
 	if (percent == 0){
 		tchstr = L"アップサンプリングの準備中";
 		m_ecTimes.SetWindowTextW(tchstr);

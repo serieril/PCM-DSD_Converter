@@ -7,8 +7,10 @@
 #include "afxwin.h"
 #include <string>
 #include"ProgressDlg.h"
-#include <fftw3.h>
+#include "fftw3.h"
 #include <omp.h>
+#include <fstream>
+#include <complex>
 using namespace std;
 
 // CPCMDSD_ConverterDlg ダイアログ
@@ -85,8 +87,8 @@ public:
 	//Wavファイルを64bitFloat(double)化し、LR分離して一時ファイルとして書き出し
 	afx_msg bool TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr, int Times);
 	//PCM-DSD変換
-	afx_msg bool WAV_Filter(FILE *UpSampleData, FILE *OrigData, int Times, omp_lock_t *myLock);
-	afx_msg bool WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, int Times);
+	afx_msg bool WAV_Filter(FILE *UpSampleData, FILE *OrigData, unsigned int Times, omp_lock_t *myLock);
+	afx_msg bool WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, unsigned int Times);
 	//フリーズ防止のためにスレッド作成
 	void WorkThread();
 	//処理中はボタンなど無効に
@@ -96,6 +98,6 @@ public:
 	//F1ヘルプ無効化
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
 	//FFTプラン初期化
-	void FFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, double *fftin, fftw_complex *ifftout);
-	void iFFTInit(fftw_plan *plan, unsigned __int64 fftsize, int Times, fftw_complex *ifftin, double *fftout);
+	void FFTInit(fftw_plan *plan, unsigned int fftsize, int Times, double *fftin, fftw_complex *ifftout);
+	void iFFTInit(fftw_plan *plan, unsigned int fftsize, int Times, fftw_complex *ifftin, double *fftout);
 };
