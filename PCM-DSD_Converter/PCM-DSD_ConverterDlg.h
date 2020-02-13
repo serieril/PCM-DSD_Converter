@@ -11,6 +11,13 @@
 #include <omp.h>
 #include <fstream>
 #include <complex>
+#define _USE_MATH_DEFINES
+#include <math.h>
+#include <locale.h>
+
+#include <malloc.h>
+#include <stdlib.h>
+
 using namespace std;
 
 // CPCMDSD_ConverterDlg ダイアログ
@@ -75,7 +82,7 @@ public:
 	//ディレクトリの再帰的検索
 	afx_msg void DirectoryFind(TCHAR *DirectoryPath);
 	//Wavファイルチェック及びメタデータ読み取り
-	afx_msg bool WAV_Metadata(TCHAR *filepath, string *metadata);
+	afx_msg bool WAV_Metadata(TCHAR *filepath, wstring *metadata);
 	//PCM-DSD変換の管理
 	afx_msg bool WAV_Convert(TCHAR *filepath, int number);
 	//DSDIFF形式で書き込み
@@ -87,8 +94,8 @@ public:
 	//Wavファイルを64bitFloat(double)化し、LR分離して一時ファイルとして書き出し
 	afx_msg bool TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr, int Times);
 	//PCM-DSD変換
-	afx_msg bool WAV_Filter(FILE *UpSampleData, FILE *OrigData, unsigned int Times, omp_lock_t *myLock);
-	afx_msg bool WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, unsigned int Times);
+	afx_msg bool WAV_Filter_Renew(FILE *UpSampleData, FILE *OrigData, unsigned int Times, omp_lock_t *myLock, unsigned int DSDsamplingRate);
+	afx_msg bool WAV_FilterLight_Renew(FILE *UpSampleData, FILE *OrigData, unsigned int Times);
 	//フリーズ防止のためにスレッド作成
 	void WorkThread();
 	//処理中はボタンなど無効に
@@ -100,4 +107,5 @@ public:
 	//FFTプラン初期化
 	void FFTInit(fftw_plan *plan, unsigned int fftsize, int Times, double *fftin, fftw_complex *ifftout);
 	void iFFTInit(fftw_plan *plan, unsigned int fftsize, int Times, fftw_complex *ifftin, double *fftout);
+	void PathCheck();
 };

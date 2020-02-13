@@ -35,6 +35,7 @@ void ProgressDlg::PostNcDestroy()
 {
 	//delete this;    //BBB追加  ダイアログの破棄
 }
+
 void ProgressDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);

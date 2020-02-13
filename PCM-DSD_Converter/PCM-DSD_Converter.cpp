@@ -37,11 +37,11 @@ CPCMDSD_ConverterApp theApp;
 BOOL CPCMDSD_ConverterApp::InitInstance()
 {
 	CWinApp::InitInstance();
-
+	
 
 	// ダイアログにシェル ツリー ビューまたはシェル リスト ビュー コントロールが
 	// 含まれている場合にシェル マネージャーを作成します。
-	CShellManager *pShellManager = new CShellManager;
+	//CShellManager *pShellManager = new CShellManager;
 
 	// MFC コントロールでテーマを有効にするために、"Windows ネイティブ" のビジュアル マネージャーをアクティブ化
 	CMFCVisualManager::SetDefaultManager(RUNTIME_CLASS(CMFCVisualManagerWindows));
@@ -53,35 +53,34 @@ BOOL CPCMDSD_ConverterApp::InitInstance()
 	// 設定が格納されているレジストリ キーを変更します。
 	// TODO: 会社名または組織名などの適切な文字列に
 	// この文字列を変更してください。
-	SetRegistryKey(_T("アプリケーション ウィザードで生成されたローカル アプリケーション"));
+	SetRegistryKey(_T("PCMDSD.COM"));
 
 	CPCMDSD_ConverterDlg dlg;
 	m_pMainWnd = &dlg;
 	INT_PTR nResponse = dlg.DoModal();
-	if (nResponse == IDOK)
-	{
-		// TODO: ダイアログが <OK> で消された時のコードを
-		//  記述してください。
-	}
-	else if (nResponse == IDCANCEL)
-	{
-		// TODO: ダイアログが <キャンセル> で消された時のコードを
-		//  記述してください。
-	}
-	else if (nResponse == -1)
-	{
-		TRACE(traceAppMsg, 0, "警告: ダイアログの作成に失敗しました。アプリケーションは予期せずに終了します。\n");
-		TRACE(traceAppMsg, 0, "警告: ダイアログで MFC コントロールを使用している場合、#define _AFX_NO_MFC_CONTROLS_IN_DIALOGS を指定できません。\n");
-	}
+	//if (nResponse == IDOK)
+	//{
+	//	// TODO: ダイアログが <OK> で消された時のコードを
+	//	//  記述してください。
+	//}
+	//else if (nResponse == IDCANCEL)
+	//{
+	//	// TODO: ダイアログが <キャンセル> で消された時のコードを
+	//	//  記述してください。
+	//}
+	//else if (nResponse == -1)
+	//{
+	//	TRACE(traceAppMsg, 0, "警告: ダイアログの作成に失敗しました。アプリケーションは予期せずに終了します。\n");
+	//	TRACE(traceAppMsg, 0, "警告: ダイアログで MFC コントロールを使用している場合、#define _AFX_NO_MFC_CONTROLS_IN_DIALOGS を指定できません。\n");
+	//}
 
-	// 上で作成されたシェル マネージャーを削除します。
-	if (pShellManager != NULL)
-	{
-		delete pShellManager;
-	}
+	//// 上で作成されたシェル マネージャーを削除します。
+	//if (pShellManager != nullptr)
+	//{
+	//	delete pShellManager;
+	//}
 
 	// ダイアログは閉じられました。アプリケーションのメッセージ ポンプを開始しないで
 	//  アプリケーションを終了するために FALSE を返してください。
 	return FALSE;
 }
-
